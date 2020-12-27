@@ -1,0 +1,221 @@
+---
+title: "Assignment 4"
+author: "Abhishek Kumar"
+date: "18/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r installpackage}
+install.packages("readxl")
+```
+
+
+```{r}
+setwd("/home/abhishek/Desktop/R assignment/Assignment 4")
+```
+
+## Data Manipulation
+
+#1 Read the data into R.
+
+```{r loaddata} 
+library("readxl")
+clgoals = read_excel("CLGoals.xlsx")
+head(clgoals)
+str(clgoals)
+```
+
+#2. Produce a table that tabulates frequency of each number of goals.
+
+```{r tablegoals}
+
+table_goals = table(clgoals$Goals)
+table_goals # Frequency of each number of goals
+
+```
+
+#3. Produce a plot of the frequency of each number of goals.
+
+```{r freqplot}
+barplot(table_goals, xlab ="Number of goals",ylab = "Frequency", main =" Frequency of each number of goals")
+
+```
+
+#4. Calculate the mean and the standard deviation of the number of goals.
+
+```{r meansd}
+mean_goals = mean(clgoals$Goals) # Mean goals
+sd_goals = sd(clgoals$Goals) # Standard deviation of number of goals
+mean_goals
+sd_goals 
+```
+
+
+
+## Task 2a: Poisson Modelling
+
+#1. Write a function that calculates the log-likelihood function (for a specified value of λ) for the Poisson model for the UEFA Champions League data.
+
+```{r loglikelihood}
+
+log_likelihood = function(observations, lambda){
+  
+  prob_at_X_xi = dpois(observations, lambda = lambda) 
+  likelihood = sum(log(prob_at_X_xi))
+  return(likelihood)
+  
+}
+
+log_likelihood(clgoals$Goals, 3)
+
+```
+
+#2. Plot the log-likelihood function for a range of values of λ.
+
+```{r plot}
+
+lambda_range =  seq(from = min(clgoals$Goals), to = max(clgoals$Goals), by =0.1)
+log_likelihood_per_lambda = c()
+
+for(i in lambda_range){
+  
+  log_likelihood_per_lambda = c(log_likelihood_per_lambda, log_likelihood(clgoals$Goals, i))
+  
+}
+
+log_likelihood_per_lambda # likelihood corresponding to different lambdas
+plot(lambda_range, log_likelihood_per_lambda,main = "Rate vs log-Likelihood", type="l", pch=15, col ="blue")
+```
+
+  
+#3. Add a vertical line to the plot at the value x and visually verify that this maximizes the log-likelihood function.
+
+Maximum likelihood estimates finds the unknown parameter lambda value that maximizes likelihood.
+From the graph I can see that log likelihood is maximum at lambda value which was mean value of goals scored in each match, i,e at 3.25.
+
+```{r}
+max(log_likelihood_per_lambda)
+log_likelihood(clgoals$Goals,mean(clgoals$Goals))
+plot(lambda_range, log_likelihood_per_lambda,main = "Rate vs log-Likelihood", type="l", pch=15, col ="blue")
+abline(v = lambda_range[which.max(log_likelihood_per_lambda)], col= "red")
+
+
+```
+  
+  
+  
+#4. Simulate 48 values from a Poisson model with λ = x and summarize the resulting values (contrasting them with the summaries produced in Task 1).
+
+Simulating 48 random variables from poisson distribution with lambda as mean of goals scored.
+
+```{r posi}
+set.seed(100)
+pois_mean_lambda = rpois(48, lambda= mean(clgoals$Goals))
+barplot(table(pois_mean_lambda), xlab ="Number of goals",ylab = "Frequency", main =" Frequency of each number of goals")
+mean_pois_mean_lambda = mean(pois_mean_lambda)
+sd_pois_mean_lambda = sd(pois_mean_lambda)
+
+print(paste("Average goals : ", mean_pois_mean_lambda))
+print(paste("Standard deviation : ", sd_pois_mean_lambda))
+```
+
+
+#5. Simulate 48 values from a Poisson model for other values of λ and summarize the resulting values (contrasting them with the summaries produced in Task 1).
+
+```{r}
+
+for(lambda in lambda_range){
+  
+  pois = rpois(48, lambda = lambda)
+  mean_pois_mean_lambda = mean(pois)
+  sd_pois_mean_lambda = sd(pois)
+  print(table(pois))
+  print(paste("Average goals_lambda ", lambda, " :", mean_pois_mean_lambda))
+  print(paste("Standard deviation_lambda ", lambda, " :",sd_pois_mean_lambda))
+}
+
+barplot(table(pois), xlab ="Number of goals",ylab = "Frequency", main =" Frequency of each number of goals")
+
+```
+
+
+## Task 2b: Hurdle Modelling
+
+#1. Create a dHurdle() function that has arguments x, param that computes P {X = x} for the Hurdle model, where the first element of the vector param is θ and the second element of the vector param is λ. Ensure that the function can handle x being a vector of values.
+
+
+```{r hHurdle}
+
+# Function takes in input two vectors x (observations) and param (theta and lambda)
+# Calculates the probabilities based on values of x for the hurdle model 
+# Returns the vector of Probability of each observations (P_X_x) for a particular theta and lambda values.
+
+dHurdle = function(x, param){
+  theta = param[1]
+  lambda = param[2]
+  P_X_x = c()
+  l = length(x)
+  for(i in 1:l){
+      
+      if(x[i] == 0){
+       P = theta
+       P_X_x = c(P_X_x, P)
+     } #if
+      else{
+       P = (1-theta)*((lambda^x[i])*(exp(-lambda)))/(factorial(x[i])*(1-exp(-lambda)))
+       P_X_x = c(P_X_x, P)
+     }#else
+    }# for
+   return(P_X_x)
+  
+} # function
+
+dHurdle(clgoals$Goals,c(2,3))
+
+```
+
+#2. Write a function that calculates the log-likelihood function (for a specified value of param) for the Hurdle model for the UEFA Champions League goal data.
+
+
+```{r}
+
+# This functions take in input a vextor of values for which likelihood has to be calculated  and another vector of parameter theta and lambda
+# call dHurdle() function to calculate probability of each observations for hurdle model.
+# Returns log-likelihood for the hurdle model for a particular set of observations.
+
+log_likelihood_hurdle = function(observations, param){
+  
+  theta = param[1]
+  lambda = param[2]
+  
+  prob_at_X_xi_hurdle = dHurdle(observations,c(theta,lambda))
+  likelihood_hurdle = sum(log(prob_at_X_xi_hurdle))
+  return(likelihood_hurdle)
+}
+log_likelihood_hurdle(clgoals$Goals, c(0.4,4)) # log-likelihood for the hurdle model for the UEFA champions league goal data.
+
+```
+
+#3. Use the optim function to find the value of θ and λ that maximizes the log-likelihood. Hint: optim minimizes functions, by default, so you may want to write a function that computes minus the log-likelihood and minimize that. Alternatively, you can set control=list(fnscale=-1) as an argument in optim to make it maximize.
+
+
+So after optimizing the log_likelihood_hurdle function for theta and lambda, the results show that we get the maximum likelihood for for the UEFA Champions League goal data at theta = 0.04173414 and lambda = 3.26110189 and the value is -90.30556.
+
+```{r}
+
+optimized_pars = optim(par = c(0.1,0.1) , fn = log_likelihood_hurdle, observations= clgoals$Goals, control=list(fnscale=-1))
+optimized_pars
+```
+
+
+#4. Comment on the value of θ found and compare the log-likelihood values found for the Poisson and Hurdle models.
+
+So after optimizing the log_likelihood_hurdle function for theta and lambda, the results show that we get the maximum likelihood for for the UEFA Champions League goal data at theta = 0.04173414, and the value is -90.30556.
+
+For poisson distribution maximum likelihood is achieved approximately at lambda value which is equal to mean of goals scored i.e 3.25 and maximum_likelihood was found to be  -90.32991.
+
+Maximum log likelihood is quite similar in both the distributions with difference of 0.02435 which is very small.
